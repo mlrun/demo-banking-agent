@@ -1,0 +1,6 @@
+PyGithub==1.59.0
+deepchecks==0.18.1
+pandera==0.20.3
+transformers==4.48.1
+datasets==3.2.0
+torch==1.13.1
