@@ -59,20 +59,23 @@ def setup(project: mlrun.projects.MlrunProject) -> mlrun.projects.MlrunProject:
         func="src/functions/train.py",
         kind="job",
         handler="train_model",
+        image=project.default_image
     )
     project.set_function(
-        name="validate", func="src/functions/validate.py", kind="job"
+        name="validate", func="src/functions/validate.py", kind="job", image=project.default_image
     )
     project.set_function(
         name="serving",
         func="src/functions/v2_model_server.py",
         kind="serving",
+        image=project.default_image
     )
     project.set_function(
         name="model-server-tester",
         func="src/functions/v2_model_tester.py",
         kind="job",
         handler="model_server_tester",
+        image=project.default_image
     )
 
     # MLRun Workflows
