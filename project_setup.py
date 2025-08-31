@@ -7,7 +7,6 @@ import mlrun
 def setup(project: mlrun.projects.MlrunProject) -> mlrun.projects.MlrunProject:
     source = project.get_param("source", default=None)
     build_image = project.get_param("build_image", default=False)
-    default_image = project.get_param("default_image", default=None)
 
     # Adding secrets to the projects:
     assert (os.environ.get("OPENAI_API_KEY", None) is not None) and (os.environ.get("OPENAI_BASE_URL", None) is not None), "\
@@ -28,15 +27,13 @@ def setup(project: mlrun.projects.MlrunProject) -> mlrun.projects.MlrunProject:
         source = proj_artifact.target_path
 
     project.set_source(source, pull_at_runtime=False)
-
-    if default_image:
-        project.set_default_image(default_image)
+    project.set_default_image(f'.mlrun-project-image-{project.name}')
 
     # Set default project docker image - functions that do not specify image will use this
     if build_image:    
         print("Building default image for the demo:")
         project.build_image(
-            image=default_image,
+            image=project.default_image,
             base_image='mlrun/mlrun-kfp',
             set_as_default=True,
             overwrite_build_params=True,
@@ -52,30 +49,26 @@ def setup(project: mlrun.projects.MlrunProject) -> mlrun.projects.MlrunProject:
         name="data",
         func="src/functions/data.py",
         kind="job",
-        image=project.default_image
     )
     project.set_function(
         name="train",
         func="src/functions/train.py",
         kind="job",
         handler="train_model",
-        image=project.default_image
     )
     project.set_function(
-        name="validate", func="src/functions/validate.py", kind="job", image=project.default_image
+        name="validate", func="src/functions/validate.py", kind="job"
     )
     project.set_function(
         name="serving",
         func="src/functions/v2_model_server.py",
         kind="serving",
-        image=project.default_image
     )
     project.set_function(
         name="model-server-tester",
         func="src/functions/v2_model_tester.py",
         kind="job",
         handler="model_server_tester",
-        image=project.default_image
     )
 
     # MLRun Workflows
