@@ -5,8 +5,8 @@ from pathlib import Path
 
 
 def setup(project: mlrun.projects.MlrunProject) -> mlrun.projects.MlrunProject:
-    source = project.get_param("source", None)
-    force_build = project.get_param("force_build", False)
+    source = project.get_param("source", default=None)
+    force_build = project.get_param("force_build", default=False)
 
     # Adding secrets to the projects:
     assert (os.environ.get("OPENAI_API_KEY", None) is not None) and (os.environ.get("OPENAI_BASE_URL", None) is not None), "\
