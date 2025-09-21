@@ -46,6 +46,7 @@ class OpenAILLMModelServer(V2ModelServer):
     :param temperature: Sampling temperature for LLM output.
     :param input_key: Key for input messages in the request (default 'inputs').
     """
+
     def __init__(
         self,
         context: mlrun.MLClientCtx = None,
@@ -114,6 +115,7 @@ class GuardrailsChoice(Choice):
     :param mapping: Mapping of boolean string ('True'/'False') to output step names
                     (e.g., {'True': 'accept', 'False': 'reject'}).
     """
+
     def __init__(self, mapping: dict):
         super().__init__()
         self.mapping = mapping
@@ -190,6 +192,7 @@ class ToxicityClassifierModelServer(V2ModelServer):
     :param name: Name of the function.
     :param threshold: Toxicity threshold (default 0.7).
     """
+
     def __init__(self, context, name: str, threshold: float = 0.7, **class_args):
         # Initialize the base server:
         super(ToxicityClassifierModelServer, self).__init__(
@@ -228,6 +231,7 @@ class ParallelRunMerger(ParallelRun):
 
     :param output_key: Key under which to store merged results in the event body.
     """
+
     def __init__(self, output_key: str, **kwargs):
         super().__init__(**kwargs)
         self.output_key = output_key
@@ -248,6 +252,7 @@ class SentimentAnalysisModelServer(V2ModelServer):
     :param model_name: HuggingFace model name (default 'cardiffnlp/twitter-roberta-base-sentiment-latest').
     :param top_k: Number of top predictions to return (default 1).
     """
+
     def __init__(
         self,
         context,
@@ -302,6 +307,7 @@ class ChurnModelServer(V2ModelServer):
     :param endpoint_url: URL of the deployed churn model endpoint.
     :param churn_mappings: Mapping of churn labels to score thresholds.
     """
+
     def __init__(
         self,
         context,
@@ -386,6 +392,7 @@ class BuildContext:
     :param prompt: Prompt template string.
     :param role: Role for the formatted message (default 'system').
     """
+
     def __init__(
         self, context_mappings: dict, output_key: str, prompt: str, role: str = "system"
     ):
@@ -529,7 +536,7 @@ class BankingAgent(V2ModelServer):
             if "tool_calls" in md and md["tool_calls"]:
                 for t in md["tool_calls"]:
                     tool_calls[t["id"]] = {
-                    "title": f"🛠️ Used tool {t['name']}: {t['args']['query']}"
+                        "title": f"🛠️ Used tool {t['name']}: {t['args']['query']}"
                     }
             if "tool_call_id" in md and md["tool_call_id"] in tool_calls:
                 tool_calls[md["tool_call_id"]]["content"] = md["content"]

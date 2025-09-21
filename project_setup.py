@@ -1,5 +1,7 @@
 import os
 import tarfile
+from pathlib import Path
+
 import mlrun
 
 
@@ -8,40 +10,51 @@ def setup(project: mlrun.projects.MlrunProject) -> mlrun.projects.MlrunProject:
     build_image = project.get_param("build_image", default=False)
 
     # Adding secrets to the projects:
-    assert (os.environ.get("OPENAI_API_KEY", None) is not None) and (os.environ.get("OPENAI_BASE_URL", None) is not None), "\
+    assert (os.environ.get("OPENAI_API_KEY", None) is not None) and (
+        os.environ.get("OPENAI_BASE_URL", None) is not None
+    ), (
+        "\
     Missing OpenAI credentials, make sure they are set as environment variables."
+    )
 
-    project.set_secrets({"OPENAI_API_KEY": mlrun.get_secret_or_env("OPENAI_API_KEY"),
-                         "OPENAI_BASE_URL": mlrun.get_secret_or_env("OPENAI_BASE_URL")})
+    project.set_secrets(
+        {
+            "OPENAI_API_KEY": mlrun.get_secret_or_env("OPENAI_API_KEY"),
+            "OPENAI_BASE_URL": mlrun.get_secret_or_env("OPENAI_BASE_URL"),
+        }
+    )
 
     # Set project git/archive source and enable pulling latest code at runtime
     if not source:
         print("Setting Source for the demo:")
         make_archive("../banking_agent", "gztar", "./", exclude=["project.yaml"])
         # Logging as artifact
-        proj_artifact = project.log_artifact('project_source', local_path='../banking_agent.tar.gz', upload=True)
-        os.remove('../banking_agent.tar.gz')
+        proj_artifact = project.log_artifact(
+            "project_source", local_path="../banking_agent.tar.gz", upload=True
+        )
+        os.remove("../banking_agent.tar.gz")
         project.set_source(source=proj_artifact.target_path, pull_at_runtime=False)
         print(f"Project Source: {source}")
         source = proj_artifact.target_path
 
     project.set_source(source, pull_at_runtime=False)
-    project.set_default_image(f'.mlrun-project-image-{project.name}')
+    project.set_default_image(f".mlrun-project-image-{project.name}")
 
     # Set default project docker image - functions that do not specify image will use this
-    if build_image:    
+    if build_image:
         print("Building default image for the demo:")
+        requirements = Path("requirements-churn.txt").read_text().split()
         project.build_image(
             image=project.default_image,
-            base_image='mlrun/mlrun-kfp',
+            base_image="mlrun/mlrun:1.9.2",
             set_as_default=True,
             overwrite_build_params=True,
-            requirements=['PyGithub==1.59.0',
-                          'deepchecks==0.18.1',
-                          'pandera==0.20.3',
-                          'transformers==4.48.1',
-                          'datasets==3.2.0',
-                          'torch==1.13.1'])
+            with_mlrun=False,
+            # requirements_file="requirements-churn.txt"
+            commands=[
+                f"pip install --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple {' '.join(requirements)}"
+            ],
+        )
 
     # MLRun Functions
     project.set_function(
@@ -55,9 +68,7 @@ def setup(project: mlrun.projects.MlrunProject) -> mlrun.projects.MlrunProject:
         kind="job",
         handler="train_model",
     )
-    project.set_function(
-        name="validate", func="src/functions/validate.py", kind="job"
-    )
+    project.set_function(name="validate", func="src/functions/validate.py", kind="job")
     project.set_function(
         name="serving",
         func="src/functions/v2_model_server.py",
@@ -71,7 +82,11 @@ def setup(project: mlrun.projects.MlrunProject) -> mlrun.projects.MlrunProject:
     )
 
     # MLRun Workflows
-    project.set_workflow("main", "src/workflows/train_and_deploy_workflow.py", image=project.default_image)
+    project.set_workflow(
+        "main",
+        "src/workflows/train_and_deploy_workflow.py",
+        image="mlrun/mlrun-kfp:1.9.2",
+    )
 
     # Save and return the project:
     project.save()
@@ -81,7 +96,7 @@ def setup(project: mlrun.projects.MlrunProject) -> mlrun.projects.MlrunProject:
 def make_archive(base_name, format="gztar", root_dir=".", exclude=None):
     """
     Create a tar.gz archive with exclusions.
-    
+
     Args:
         base_name (str): Output file name (without extension).
         format (str): Archive format ("gztar", "tar").

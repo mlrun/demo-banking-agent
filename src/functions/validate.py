@@ -75,9 +75,9 @@ def validate_data_integrity(
     context.log_result("passed_suite", passed_suite)
     context.log_artifact("suite_report", local_path=suite_report)
 
-    assert (
-        allow_validation_failure or passed_suite == True
-    ), "Data integrity validation failed"
+    assert allow_validation_failure or passed_suite == True, (
+        "Data integrity validation failed"
+    )
 
 
 @mlrun.handler()
@@ -117,9 +117,9 @@ def validate_train_test_split(
     context.log_result("passed_suite", passed_suite)
     context.log_artifact("suite_report", local_path=suite_report)
 
-    assert (
-        allow_validation_failure or passed_suite == True
-    ), "Train test split validation failed"
+    assert allow_validation_failure or passed_suite == True, (
+        "Train test split validation failed"
+    )
 
 
 @mlrun.handler()

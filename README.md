@@ -18,7 +18,7 @@ The architecture is customizable, with observability for project, tabular, and g
 - LLM as a judge: monitoring guardrail performance
 - RAG (retrieval-augmented generation): data ingestion and retrieval
 - Application serving graph: input guardrails, enrichment, and agent invocation
-- Gradio UI: displays guardrail, enrichment, and tool outputs
+- Streamlit UI: displays guardrail, enrichment, and tool outputs
 - Monitoring for both tabular ML and generative models
 
 ### Architecture
@@ -45,8 +45,13 @@ The architecture is customizable, with observability for project, tabular, and g
 1. Install dependencies:
 
    ```bash
+   conda create -n banking-agent python=3.11 ipykernel -y
+   conda activate banking-agent
    pip install -r requirements.txt
+   # or uv pip install -r requirements.txt
    ``` 
+   
+   Be sure to use this conda environment as the kernel for the following Juypter notebooks.
 
 2. Set up MLRun:
 
@@ -54,10 +59,9 @@ The architecture is customizable, with observability for project, tabular, and g
 
 3. Set OpenAI credentials
 
-    Update the [env file](.env.example) to include:
+    Copy the [env file](.env.example) as `ai_gateway.env` and update to include:
     - `OPENAI_API_KEY`: Your OpenAI API key.
     - `OPENAI_BASE_URL`: The base URL for OpenAI API.
-
 
 
 ## Demo Flow
@@ -96,17 +100,18 @@ The architecture is customizable, with observability for project, tabular, and g
 
 ### 3. **Application Deployment**
 - **Notebook**: [03_application_deployment.ipynb](03_application_deployment.ipynb)
-- **Description**: Deploys the full application, integrating the churn model, guardrails, and additional analysis into a serving graph. The application includes a context-aware LLM agent, sentiment analysis, and a Gradio-based UI for interactive testing.
+- **Description**: Deploys the full application, integrating the churn model, guardrails, and additional analysis into a serving graph. The application includes a context-aware LLM agent, sentiment analysis, and a Streamlit-based UI for interactive testing.
 - **Key Features:**
   - Ingests markdown knowledge base files for RAG (retrieval-augmented generation) using Milvus vector store.
   - Sets up a serving graph with input guardrails (toxicity and banking topic), input analysis (sentiment and churn prediction), and a context-building step for the LLM agent.
   - Integrates a custom `BankingAgent` LLM server with context and vector database retrieval.
-  - Provides a Gradio UI for chat-based interaction, displaying guardrail and analysis outputs.
+  - Provides a Streamlit UI for chat-based interaction, displaying guardrail and analysis outputs.
   - Includes mock server testing and deployment to Kubernetes.
 - **Key Files:**
   - [src/functions/agent_graph_v2.py](src/functions/agent_graph_v2.py): Defines the application serving graph.
   - [src/functions/banking_topic_guardrail.py](src/functions/banking_topic_guardrail.py): Implements the Banking Topic Guardrail using an LLM for topic classification.
   - [src/functions/toxicity_guardrail.py](src/functions/toxicity_guardrail.py): Implements the Toxicity Guardrail for filtering toxic language.
   - [src/functions/llm_as_a_judge.py](src/functions/llm_as_a_judge.py): Provides LLM-based evaluation and monitoring for guardrail performance.
+  - [src/functions/frontend_ui.py](src/functions/frontend_ui.py): Streamlit frontend UI application for chat interface with display for guardrails and input analyses.
   - [data/general_bank_info_kb.md](data/general_bank_info_kb.md), [data/checking_savings_kb.md](data/checking_savings_kb.md), [data/customer_faq.md](data/customer_faq.md): Knowledge base files for RAG.
   - [requirements-agent.txt](requirements-agent.txt): Requirements for the agent and serving graph.
