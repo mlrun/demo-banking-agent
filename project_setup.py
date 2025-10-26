@@ -46,7 +46,7 @@ def setup(project: mlrun.projects.MlrunProject) -> mlrun.projects.MlrunProject:
         requirements = Path("requirements-churn.txt").read_text().split()
         project.build_image(
             image=project.default_image,
-            base_image="mlrun/mlrun:1.9.2",
+            base_image="mlrun/mlrun",
             set_as_default=True,
             overwrite_build_params=True,
             with_mlrun=False,
@@ -85,7 +85,7 @@ def setup(project: mlrun.projects.MlrunProject) -> mlrun.projects.MlrunProject:
     project.set_workflow(
         "main",
         "src/workflows/train_and_deploy_workflow.py",
-        image="mlrun/mlrun-kfp:1.9.2",
+        image="mlrun/mlrun-kfp",
     )
 
     # Save and return the project:

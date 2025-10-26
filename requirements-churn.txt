@@ -1,6 +1,6 @@
 datasets>=4.0.0
 deepchecks>=0.19.1
-mlrun==1.9.2
+mlrun
 pandera>=0.26.1
 pygithub>=2.8.1
 torch>=2.8.0
