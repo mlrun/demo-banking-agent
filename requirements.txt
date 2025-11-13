@@ -17,3 +17,5 @@ torch>=2.8.0
 transformers>=4.56.0
 unstructured>=0.18.14
 v3io-frames>=0.13.10
+pymilvus
+milvus-lite
