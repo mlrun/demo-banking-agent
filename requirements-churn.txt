@@ -4,4 +4,4 @@ mlrun
 pandera>=0.26.1
 pygithub>=2.8.1
 torch>=2.8.0
-transformers==4.35.0
+transformers==4.48.0
