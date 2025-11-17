@@ -52,11 +52,6 @@ def setup(project: mlrun.projects.MlrunProject) -> mlrun.projects.MlrunProject:
             with_mlrun=False,
             # requirements_file="requirements-churn.txt"
             commands = [
-                "apt-get update && apt-get install -y curl build-essential && "
-                "curl https://sh.rustup.rs -sSf | bash -s -- -y && "
-                ". $HOME/.cargo/env && "
-                "rustup default nightly && "
-                "pip install --upgrade pip && "
                 "pip install --index-url https://download.pytorch.org/whl/cpu "
                 "--extra-index-url https://pypi.org/simple "
                 f"{' '.join(requirements)}"
