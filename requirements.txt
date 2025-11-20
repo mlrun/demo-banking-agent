@@ -9,13 +9,12 @@ langchain-milvus>=0.2.1
 langchain-openai>=0.3.32
 langgraph>=0.6.6
 markdown>=3.8.2
-mlrun[plotly]
 numpy==1.26.4
 pydantic==2.10.6
 s3fs>=2024.6.1
 torch>=2.8.0
-transformers==4.48.0
-unstructured>=0.18.14
+transformers>=4.48.0
+unstructured>=0.18.3
 v3io-frames>=0.13.10
 pymilvus
 milvus-lite
