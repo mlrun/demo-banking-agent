@@ -3,8 +3,8 @@ evaluate==0.4.5
 fastapi==0.116.1
 graphviz==0.20.0
 langchain==0.3.27
-langchain-community==0.3.21
-langchain-core==0.3.75
+langchain-community==0.3.27
+langchain-core==0.3.81
 langchain-milvus==0.2.1
 langchain-openai==0.3.32
 langgraph==0.6.6
@@ -13,7 +13,7 @@ numpy==1.26.4
 pydantic==2.10.6
 s3fs==2024.6.1
 torch==2.8.0
-transformers==4.48.0
+transformers==4.53.0
 unstructured==0.18.3
 v3io-frames==0.13.10
 duckduckgo_search==8.1.1
