@@ -26,19 +26,22 @@ class LLMModelServer(mlrun.serving.LLModel):
     def predict(
         self,
         body: Any,
-        messages: Optional[list[dict]] = None,
+        messages: dict = None,
         invocation_config: Optional[dict] = None,
         **kwargs,
     ) -> Any:
-        
+        print("This is the body i got:", body)
+        print("This is the messages i got:", messages)
+
         messages_str = " ".join([message["content"] for message in messages])
+        print("This is the messages_str i filtered:", messages_str)
 
         input_ids, attention_mask = self.tokenizer(
             messages_str, return_tensors="pt"
         ).values()
 
         outputs = self.model.generate(input_ids=input_ids, attention_mask=attention_mask, max_new_tokens=5)
-        
+        print("This is the outputs i got:", outputs)
         # Remove input:
         outputs = self.tokenizer.decode(outputs[0])
         decoded_outputs_split = outputs.split(body["question"])[-1]
@@ -49,5 +52,5 @@ class LLMModelServer(mlrun.serving.LLModel):
         else:
             answer = "Unavailable"
         return {"question": body["question"], "answer": answer}
-
+        # return {"response": answer}
     

@@ -21,88 +21,18 @@ import jmespath
 import mlrun
 import openai
 import requests
+from langchain.agents import create_react_agent
 from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_core.tools import create_retriever_tool
 from langchain_milvus import Milvus
+# from langchain_agents import create_react_agent
 from langchain_openai import OpenAIEmbeddings
-from langgraph.prebuilt import create_react_agent
+# from langchain.agents import create_agent
+from langchain_core.tools import tool
 from mlrun.serving.routers import ParallelRun
-from mlrun.serving.v2_serving import V2ModelServer
+# from mlrun.serving.v2_serving import V2ModelServer
 from storey.transformations import Choice
 from transformers import AutoTokenizer, RobertaForSequenceClassification, pipeline
-
-
-class OpenAILLMModelServer(V2ModelServer):
-    """
-    MLRun V2ModelServer for OpenAI LLM chat completion.
-
-    Used in the serving graph to generate responses from an OpenAI model, with a system prompt and chat history.
-
-    :param context: MLRun context.
-    :param name: Name of the function.
-    :param model_path: Path to the model (placeholder - not used).
-    :param model_name: OpenAI model name (e.g., 'gpt-4o-mini').
-    :param system_prompt: System prompt for the LLM.
-    :param temperature: Sampling temperature for LLM output.
-    :param input_key: Key for input messages in the request (default 'inputs').
-    """
-
-    def __init__(
-        self,
-        context: mlrun.MLClientCtx = None,
-        name: str = None,
-        model_path: str = None,
-        model_name: str = None,
-        system_prompt: str = None,
-        temperature: int = 0,
-        input_key: str = "inputs",
-        **kwargs,
-    ):
-        super().__init__(name=name, context=context, model_path=model_path, **kwargs)
-        self.model = None
-        self.model_name = model_name
-        self.system_prompt = system_prompt
-        self.temperature = temperature
-        self.input_key: str = input_key
-
-    def load(self):
-        print("Establishing connection to OpenAI")
-        api_key = mlrun.get_secret_or_env("OPENAI_API_KEY")
-        base_url = mlrun.get_secret_or_env("OPENAI_BASE_URL")
-        self.client = openai.OpenAI(
-            api_key=api_key,
-            base_url=base_url,
-        )
-
-    def predict(self, request: dict[str, Any]):
-        """
-        Generate a model prediction based on the provided request dictionary.
-
-        This method formats the chat history from the request, sends it to the model for completion,
-        and returns the generated response.
-
-        :param request: A dictionary containing the chat messages under the key specified by `self.input_key`.
-
-        :returns: A list containing the model's response as a single string.
-        """
-        messages = request[self.input_key]
-
-        # format chat history for single user input (used for model monitoring)
-        formatted_messages = "\n".join(
-            [f"{m['role']}: {m['content']}" for m in messages]
-        )
-        request[self.input_key] = [formatted_messages]
-
-        result = self.client.chat.completions.create(
-            model=self.model_name,
-            temperature=self.temperature,
-            messages=[
-                {"role": "system", "content": self.system_prompt},
-                {"role": "user", "content": formatted_messages},
-            ],
-        )
-
-        return [result.choices[0].message.content]
 
 
 class GuardrailsChoice(Choice):
@@ -131,11 +61,30 @@ class GuardrailsChoice(Choice):
 
         :returns: A list with the selected outlet(s) based on the guardrails' evaluation.
         """
-        flag = "True"
+        # flag = "True"
+        # print(f"This is the 'guardrails_output' in the guardrail filter step{event['guardrails_output']}")
+        # for guardrail, output in event["guardrails_output"].items():
+        #     print("inside GuardrailsChoice select_outlets")
+        #     print("this is the 'guardrail' part", guardrail)
+        #     print(" this is the 'output' part", output)
+        #     if str(output["response"][0]) == "False":
+        #         flag = "False"
+        # return [self.mapping[flag]]
+        flag = True
         for guardrail, output in event["guardrails_output"].items():
-            if str(output["outputs"][0]) == "False":
-                flag = "False"
-        return [self.mapping[flag]]
+            # common patterns you have in your data:
+            if "response" in output:
+                val = output["response"][0]  # e.g., True/False
+            elif "answer" in output:
+                val = output["answer"]  # e.g., "False"
+            else:
+                # unknown schema: treat as pass or fail depending on your policy
+                val = True
+
+            if str(val) == "False":
+                flag = False
+
+        return [self.mapping[str(flag)]]
 
 
 def accept(event):
@@ -182,47 +131,6 @@ def responder(event):
     return event
 
 
-class ToxicityClassifierModelServer(V2ModelServer):
-    """
-    MLRun V2ModelServer for toxicity detection.
-
-    Uses the 'toxicity' evaluation module to check if input text contains toxic language.
-
-    :param context: MLRun context.
-    :param name: Name of the function.
-    :param threshold: Toxicity threshold (default 0.7).
-    """
-
-    def __init__(self, context, name: str, threshold: float = 0.7, **class_args):
-        # Initialize the base server:
-        super(ToxicityClassifierModelServer, self).__init__(
-            context=context,
-            name=name,
-            **class_args,
-        )
-
-        # Store the threshold of toxicity:
-        self.threshold = threshold
-
-    def load(self):
-        self.model = evaluate.load("toxicity", module_type="measurement")
-
-    def predict(self, inputs: dict) -> str:
-        """
-        Predicts whether the input content is below the toxicity threshold.
-
-        :param inputs: A dictionary containing an "inputs" key, which is a list of dictionaries with a "content" key.
-
-        :returns: A list containing a boolean indicating if the predicted toxicity is below the threshold.
-        """
-        return [
-            self.model.compute(predictions=[i["content"] for i in inputs["inputs"]])[
-                "toxicity"
-            ][0]
-            < self.threshold
-        ]
-
-
 class ParallelRunMerger(ParallelRun):
     """
     ParallelRun router that merges outputs under a specified key.
@@ -238,12 +146,13 @@ class ParallelRunMerger(ParallelRun):
 
     def merger(self, body, results):
         body[self.output_key] = results
+        print("Body input:",body)
         return body
 
 
-class SentimentAnalysisModelServer(V2ModelServer):
+class SentimentAnalysisModelServer(mlrun.serving.Model):
     """
-    MLRun V2ModelServer for sentiment analysis.
+    MLRun Model for sentiment analysis.
 
     Uses a HuggingFace transformer model to classify sentiment of the latest user message.
 
@@ -290,13 +199,15 @@ class SentimentAnalysisModelServer(V2ModelServer):
         :returns: A list containing the predicted sentiment label as a string.
         """
         message = inputs["inputs"][-1]["content"]
+        print("Inside sentiment-analysis step")
         print("MESSAGE", message)
-        return [self.sentiment_classifier(message)[0][0]["label"]]
+        return {"response": [self.sentiment_classifier(message)[0][0]["label"]]}
 
 
-class ChurnModelServer(V2ModelServer):
+
+class ChurnModelServer(mlrun.serving.Model):
     """
-    MLRun V2ModelServer for churn prediction.
+    MLRun Model for churn prediction.
 
     Looks up user features and queries a deployed churn model endpoint to predict churn propensity, mapping the score to a label.
 
@@ -354,6 +265,7 @@ class ChurnModelServer(V2ModelServer):
 
         :returns: A list containing the predicted churn label(s) for the user.
         """
+        print("Inside churn prediction step")
         resp = requests.post(
             url=self.endpoint_url, json={"inputs": [self.data[inputs["user_id"]]]}
         )
@@ -366,7 +278,7 @@ class ChurnModelServer(V2ModelServer):
                 if value >= threshold:
                     return label
 
-        return [map_churn_score(churn_score)]
+        return {"response": [map_churn_score(churn_score)]}
 
 
 def _format_question(question: str, role: str = "user"):
@@ -434,8 +346,11 @@ class BuildContext:
 
         :returns: The updated event dictionary with the formatted question added under the specified output key.
         """
+        print(f"Processing event: {event}")
+        print(f"Context mapping: {self.context_mappings}")
+
         extracted_context = {
-            k: jmespath.search(v, event) for k, v in self.context_mappings.items()
+            k: jmespath.search(v, event['response']) for k, v in self.context_mappings.items()
         }
         event[self.output_key] = [
             _format_question(self.prompt.format(**extracted_context), role=self.role)
@@ -443,7 +358,9 @@ class BuildContext:
         return event
 
 
-class BankingAgent(V2ModelServer):
+class BankingAgentOpenAI(mlrun.serving.LLModel):
+
+#class BankingAgent(V2ModelServer):
     """
     MLRun V2ModelServer for the Banking Agent LLM orchestration.
 
