@@ -23,3 +23,4 @@ duckduckgo_search==8.1.1
 pymilvus
 milvus-lite
 scikit-learn==1.5.2
+streamlit

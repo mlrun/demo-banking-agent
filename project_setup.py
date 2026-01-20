@@ -123,7 +123,7 @@ def setup(project: mlrun.projects.MlrunProject) -> mlrun.projects.MlrunProject:
             kind="serving",
             image=project.default_image,
         ).save()
-    
+
     # MLRun Workflows
     project.set_workflow(
         "main",

@@ -25,15 +25,22 @@ from langchain.agents import create_react_agent
 from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_core.tools import create_retriever_tool
 from langchain_milvus import Milvus
-# from langchain_agents import create_react_agent
-from langchain_openai import OpenAIEmbeddings
-# from langchain.agents import create_agent
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_core.tools import tool
 from mlrun.serving.routers import ParallelRun
-# from mlrun.serving.v2_serving import V2ModelServer
 from storey.transformations import Choice
 from transformers import AutoTokenizer, RobertaForSequenceClassification, pipeline
+from typing import Any
+from langchain_core.prompts import PromptTemplate
 
+def enrich_request(event: dict):
+    # assumes your request body has: {"inputs": [{"role": "...", "content": "..."} , ...]}
+    last_content = (event.get("inputs") or [{}])[-1].get("content")
+
+    # Fill only if missing, so you can still override when needed
+    event["latest_user_message"]= last_content
+    event["question"] = last_content
+    return event
 
 class GuardrailsChoice(Choice):
     """
@@ -164,10 +171,10 @@ class SentimentAnalysisModelServer(mlrun.serving.Model):
 
     def __init__(
         self,
-        context,
         name: str,
         model_name: str = "cardiffnlp/twitter-roberta-base-sentiment-latest",
         top_k: int = 1,
+        context=None,
         **class_args,
     ):
         # Initialize the base server:
@@ -204,7 +211,6 @@ class SentimentAnalysisModelServer(mlrun.serving.Model):
         return {"response": [self.sentiment_classifier(message)[0][0]["label"]]}
 
 
-
 class ChurnModelServer(mlrun.serving.Model):
     """
     MLRun Model for churn prediction.
@@ -221,12 +227,12 @@ class ChurnModelServer(mlrun.serving.Model):
 
     def __init__(
         self,
-        context,
         name: str,
         dataset: str,
         label_column: str,
         endpoint_url: str,
         churn_mappings: dict,
+        context=None,
         **class_args,
     ):
         # Initialize the base server:
@@ -358,27 +364,117 @@ class BuildContext:
         return event
 
 
+# class BankingAgentOpenAI(mlrun.serving.LLModel):
+#     """
+#     MLRun LLModel for the Banking Agent LLM orchestration.
+#
+#     Combines LLM, vector search, and web search tools to generate context-aware responses for banking queries.
+#     Used as the final step in the serving graph, leveraging retrieval-augmented generation and external tools.
+#
+#     :param vector_db_collection: Name of the Milvus collection for vector search.
+#     :param vector_db_args: Connection arguments for Milvus.
+#     :param vector_db_description: Description of the vector DB for the retriever tool.
+#     :param model_name: OpenAI model name.
+#     :param system_prompt: System prompt for the LLM.
+#     :param prompt_input_key: Key for the formatted prompt in the request (default 'formatted_prompt').
+#     :param messages_input_key: Key for the chat history/messages in the request (default 'inputs').
+#     :param context: MLRun context.
+#     :param name: Name of the function.
+#     :param model_path: Path to the model (not used).
+#     """
+#
+#     def __init__(
+#         self,
+#         vector_db_collection: str,
+#         vector_db_args: dict,
+#         vector_db_description: str,
+#         model_name: str,
+#         system_prompt: str,
+#         prompt_input_key: str = "formatted_prompt",
+#         messages_input_key: str = "inputs",
+#         context: mlrun.MLClientCtx = None,
+#         name: str = None,
+#         model_path: str = None,
+#         **kwargs,
+#     ):
+#         super().__init__(name=name, context=context, model_path=model_path, **kwargs)
+#         self.model_name = model_name
+#         self.system_prompt = system_prompt
+#         self.prompt_input_key = prompt_input_key
+#         self.messages_input_key = messages_input_key
+#         self.vector_db_collection = vector_db_collection
+#         self.vector_db_args = vector_db_args
+#         self.vector_db_description = vector_db_description
+#
+#     def load(self):
+#         """
+#         Initializes and loads the vector store, retriever tool, and agent.
+#         This method establishes a connection to the OpenAI embedding service and initializes
+#         the Milvus vector store with the specified collection and connection arguments. It then
+#         creates a retriever tool using the vector store and sets up the agent with the specified
+#         model, tools, and system prompt.
+#         """
+#
+#         if self.vector_db_args.get("uri").startswith("store://"):
+#             vectordb_path = mlrun.get_dataitem(
+#                 self.vector_db_args["uri"]
+#             ).local()
+#
+#             self.vector_db_args["uri"] = f"{vectordb_path}"
+#             import time
+#             time.sleep(5)  # wait for the file to be available locally
+#
+#         print("Establishing connection to OpenAI")
+#         self.vectorstore = Milvus(
+#             collection_name=self.vector_db_collection,
+#             embedding_function=OpenAIEmbeddings(model="text-embedding-3-small"),
+#             connection_args=self.vector_db_args,
+#             auto_id=True,
+#         )
+#         self.retriever_tool = create_retriever_tool(
+#             retriever=self.vectorstore.as_retriever(search_kwargs={"k": 1}),
+#             name="bank-info-tool",
+#             description=self.vector_db_description,
+#         )
+#         self.agent = create_react_agent(
+#             llm=self.model_name,
+#             tools=[DuckDuckGoSearchRun(), self.retriever_tool],
+#             prompt=self.system_prompt,
+#         )
+#
+#     def predict(self, request: dict[str, Any]):
+#         """
+#         Processes a request to generate a prediction using the agent, parses tool calls, and formats the response.
+#
+#         :param request: A dictionary containing input data, including prompt and message history.
+#
+#         :returns: A dictionary with the agent's response and a list of tool call details for UI display.
+#         """
+#         messages = request[self.prompt_input_key] + request[self.messages_input_key]
+#         print(messages)
+#
+#         resp = self.agent.invoke({"messages": messages})
+#         response = resp["messages"][-1].content
+#
+#         # Parse tool calls from the agent's message trace for UI display. This loop iterates over all messages in the agent's output:
+#         # - If a message contains tool calls, it adds an entry for each tool call (by id) with a title describing the tool and query used.
+#         # - If a message is a response to a previous tool call (has a tool_call_id), it attaches the tool's output/content to the corresponding tool call entry.
+#         # Example output: [{'title': '🛠️ Used tool bank-info-tool: cashback rewards checking account IGZ Bank', 'content': 'Guidelines for Opening Checking/Savings Accounts...}]
+#         tool_calls = {}
+#         for m in resp["messages"]:
+#             md = m.dict()
+#             if "tool_calls" in md and md["tool_calls"]:
+#                 for t in md["tool_calls"]:
+#                     tool_calls[t["id"]] = {
+#                         "title": f"🛠️ Used tool {t['name']}: {t['args']['query']}"
+#                     }
+#             if "tool_call_id" in md and md["tool_call_id"] in tool_calls:
+#                 tool_calls[md["tool_call_id"]]["content"] = md["content"]
+#
+#         return {"response": [response], "tool_calls": list(tool_calls.values())}
+
+
 class BankingAgentOpenAI(mlrun.serving.LLModel):
-
-#class BankingAgent(V2ModelServer):
-    """
-    MLRun V2ModelServer for the Banking Agent LLM orchestration.
-
-    Combines LLM, vector search, and web search tools to generate context-aware responses for banking queries.
-    Used as the final step in the serving graph, leveraging retrieval-augmented generation and external tools.
-
-    :param vector_db_collection: Name of the Milvus collection for vector search.
-    :param vector_db_args: Connection arguments for Milvus.
-    :param vector_db_description: Description of the vector DB for the retriever tool.
-    :param model_name: OpenAI model name.
-    :param system_prompt: System prompt for the LLM.
-    :param prompt_input_key: Key for the formatted prompt in the request (default 'formatted_prompt').
-    :param messages_input_key: Key for the chat history/messages in the request (default 'inputs').
-    :param context: MLRun context.
-    :param name: Name of the function.
-    :param model_path: Path to the model (not used).
-    """
-
     def __init__(
         self,
         vector_db_collection: str,
@@ -403,24 +499,16 @@ class BankingAgentOpenAI(mlrun.serving.LLModel):
         self.vector_db_description = vector_db_description
 
     def load(self):
-        """
-        Initializes and loads the vector store, retriever tool, and agent.
-        This method establishes a connection to the OpenAI embedding service and initializes
-        the Milvus vector store with the specified collection and connection arguments. It then
-        creates a retriever tool using the vector store and sets up the agent with the specified
-        model, tools, and system prompt.
-        """
-
-        if self.vector_db_args.get("uri").startswith("store://"):
-            vectordb_path = mlrun.get_dataitem(
-                self.vector_db_args["uri"]
-            ).local()
-
+        if self.vector_db_args.get("uri", "").startswith("store://"):
+            vectordb_path = mlrun.get_dataitem(self.vector_db_args["uri"]).local()
             self.vector_db_args["uri"] = f"{vectordb_path}"
             import time
-            time.sleep(5)  # wait for the file to be available locally
+            time.sleep(5)
 
-        print("Establishing connection to OpenAI")
+        # 1) Create an LLM object (NOT a string)
+        self.llm = ChatOpenAI(model=self.model_name, temperature=0)
+
+        # 2) Vector store + retriever tool
         self.vectorstore = Milvus(
             collection_name=self.vector_db_collection,
             embedding_function=OpenAIEmbeddings(model="text-embedding-3-small"),
@@ -432,39 +520,142 @@ class BankingAgentOpenAI(mlrun.serving.LLModel):
             name="bank-info-tool",
             description=self.vector_db_description,
         )
-        self.agent = create_react_agent(
-            model=self.model_name,
-            tools=[DuckDuckGoSearchRun(), self.retriever_tool],
-            prompt=self.system_prompt,
+
+        # 3) ReAct prompt TEMPLATE (must contain tools/tool_names/agent_scratchpad)
+        react_template = """{system_prompt}
+
+        You have access to the following tools:
+        {tools}
+        
+        Use the following format:
+        
+        Question: {input}
+        Thought: you should always think about what to do
+        Action: one of [{tool_names}]
+        Action Input: the input to the action
+        Observation: the result of the action
+        ... (repeat Thought/Action/Action Input/Observation as needed)
+        Thought: I now know the final answer
+        Final: the final answer to the user
+        
+        Begin!
+        
+        Question: {input}
+        {agent_scratchpad}
+        """
+        prompt = PromptTemplate.from_template(react_template).partial(
+            system_prompt=self.system_prompt
         )
 
+        # 4) Create agent runnable
+        self.agent = create_react_agent(
+            llm=self.llm,
+            tools=[DuckDuckGoSearchRun(), self.retriever_tool],
+            prompt=prompt,
+        )
+
+    def _messages_to_input_text(self, messages: Any) -> str:
+        """
+        Your current request seems to contain a 'formatted_prompt' plus chat history.
+        ReAct agent expects a single 'input' string, so we collapse messages into text.
+        Adjust this to your actual message object types (dicts vs BaseMessage).
+        """
+        parts = []
+        for m in messages:
+            if isinstance(m, dict):
+                role = m.get("role", "user")
+                content = m.get("content", "")
+            else:
+                # LangChain BaseMessage usually has .type / .content
+                role = getattr(m, "type", "user")
+                content = getattr(m, "content", str(m))
+            parts.append(f"{role}: {content}")
+        return "\n".join(parts).strip()
+
     def predict(self, request: dict[str, Any]):
-        """
-        Processes a request to generate a prediction using the agent, parses tool calls, and formats the response.
-
-        :param request: A dictionary containing input data, including prompt and message history.
-
-        :returns: A dictionary with the agent's response and a list of tool call details for UI display.
-        """
+        # Your original line: messages = request[prompt_key] + request[messages_key]
         messages = request[self.prompt_input_key] + request[self.messages_input_key]
-        print(messages)
+        input_text = self._messages_to_input_text(messages)
 
-        resp = self.agent.invoke({"messages": messages})
-        response = resp["messages"][-1].content
+        # ReAct agent expects {"input": ...}, not {"messages": ...}
+        resp = self.agent.invoke({"input": input_text})
 
-        # Parse tool calls from the agent's message trace for UI display. This loop iterates over all messages in the agent's output:
-        # - If a message contains tool calls, it adds an entry for each tool call (by id) with a title describing the tool and query used.
-        # - If a message is a response to a previous tool call (has a tool_call_id), it attaches the tool's output/content to the corresponding tool call entry.
-        # Example output: [{'title': '🛠️ Used tool bank-info-tool: cashback rewards checking account IGZ Bank', 'content': 'Guidelines for Opening Checking/Savings Accounts...}]
-        tool_calls = {}
-        for m in resp["messages"]:
-            md = m.dict()
-            if "tool_calls" in md and md["tool_calls"]:
-                for t in md["tool_calls"]:
-                    tool_calls[t["id"]] = {
-                        "title": f"🛠️ Used tool {t['name']}: {t['args']['query']}"
-                    }
-            if "tool_call_id" in md and md["tool_call_id"] in tool_calls:
-                tool_calls[md["tool_call_id"]]["content"] = md["content"]
+        # Depending on LC version, `resp` may be a string or a dict.
+        # In many versions, create_react_agent returns the final string directly.
+        response_text = resp if isinstance(resp, str) else resp.get("output", str(resp))
 
-        return {"response": [response], "tool_calls": list(tool_calls.values())}
+        # Tool call parsing: with ReAct runnable, tool traces are usually in intermediate steps,
+        # not in resp["messages"]. If you need UI tool logs, consider AgentExecutor with return_intermediate_steps=True.
+        return {"response": [response_text], "tool_calls": []}
+
+
+import mlrun
+from typing import Any, Optional
+from transformers import AutoModelForCausalLM, AutoTokenizer
+import torch
+
+
+class BankingAgentHuggingFace(mlrun.serving.LLModel):
+    def __init__(
+        self,
+        context: mlrun.MLClientCtx = None,
+        name: str = None,
+        model_path: str = None,
+        model_name: str = None,
+        prompt_input_key: str = "formatted_prompt",   # your BuildContext output
+        messages_input_key: str = "inputs",           # your chat history
+        max_new_tokens: int = 256,
+        temperature: float = 0.2,
+        **kwargs,
+    ):
+        super().__init__(name=name, context=context, model_path=model_path, **kwargs)
+        self.model_name = model_name
+        self.prompt_input_key = prompt_input_key
+        self.messages_input_key = messages_input_key
+        self.max_new_tokens = max_new_tokens
+        self.temperature = temperature
+
+    def load(self):
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        self.model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            torch_dtype=torch.float16 if torch.cuda.is_available() else None,
+            device_map="auto" if torch.cuda.is_available() else None,
+        )
+
+    def _coerce_messages(self, body: dict, messages: Optional[list] = None) -> list[dict]:
+        # Prefer MLRun-provided `messages` (like in banking_topic_guardrail.py),
+        # otherwise fall back to your graph’s request payload.
+        if messages:
+            return messages
+        msgs = []
+        if body.get(self.prompt_input_key):
+            # formatted_prompt in your graph is a list of {"role","content"} dicts
+            msgs += body[self.prompt_input_key]
+        if body.get(self.messages_input_key):
+            msgs += body[self.messages_input_key]
+        return msgs
+
+    def predict(self, body: Any, messages: list = None, invocation_config: Optional[dict] = None, **kwargs):
+        msgs = self._coerce_messages(body, messages)
+
+        # Minimal chat->text prompt (you can refine formatting per your model’s chat template)
+        prompt = "\n".join([f"{m.get('role','user')}: {m.get('content','')}" for m in msgs]).strip()
+        prompt += "\nassistant:"
+
+        inputs = self.tokenizer(prompt, return_tensors="pt")
+        inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
+
+        out = self.model.generate(
+            **inputs,
+            max_new_tokens=self.max_new_tokens,
+            do_sample=self.temperature > 0,
+            temperature=self.temperature,
+        )
+        decoded = self.tokenizer.decode(out[0], skip_special_tokens=True)
+
+        # Basic “strip prompt prefix” (often good enough; adjust per model)
+        answer = decoded[len(decoded) - max(0, len(decoded) - len(prompt)) :]
+        answer = answer.replace("assistant:", "").strip() or decoded.strip()
+
+        return {"response": [answer], "tool_calls": []}
