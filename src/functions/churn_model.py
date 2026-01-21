@@ -10,33 +10,6 @@ from sklearn.datasets import load_iris
 
 warnings.filterwarnings("ignore")
 
-
-# class ChurnModel(mlrun.serving.V2ModelServer):
-#     """
-#     MLRun V2ModelServer for churn prediction.
-
-#     Loads a pickled scikit-learn model and predicts churn likelihood for input samples.
-#     The model should output class probabilities; this server returns the probability
-#     of the positive (churn) class for each input.
-
-#     :param context: MLRun context.
-#     :param name: Name of the function.
-#     """
-
-#     def load(self):
-#         """load and initialize the model and/or other elements"""
-#         model_file, extra_data = self.get_model(".pkl")
-#         self.model = load(open(model_file, "rb"))
-
-#     def predict(self, body: dict) -> List:
-#         """Generate model predictions from sample."""
-#         feats = np.asarray(body["inputs"])
-#         result: np.ndarray = self.model.predict_proba(feats)
-#         # Only interested in churn likelihood
-#         return [i[1] for i in result.tolist()]
-
-
-
 class ChurnModel(mlrun.serving.Model):
     def __init__(
         self,

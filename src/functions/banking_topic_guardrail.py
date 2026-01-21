@@ -1,4 +1,5 @@
 import mlrun
+import mlrun.serving
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from typing import Any, Optional
 
@@ -41,9 +42,9 @@ class LLMModelServer(mlrun.serving.LLModel):
         ).values()
 
         outputs = self.model.generate(input_ids=input_ids, attention_mask=attention_mask, max_new_tokens=5)
-        print("This is the outputs i got:", outputs)
         # Remove input:
         outputs = self.tokenizer.decode(outputs[0])
+        print("This is the outputs i filtered:", outputs)
         decoded_outputs_split = outputs.split(body["question"])[-1]
         if "True" in decoded_outputs_split:
             answer = "True"
