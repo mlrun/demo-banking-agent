@@ -353,9 +353,8 @@ class BuildContext:
         print(f"Processing event: {event}")
         print(f"Context mapping: {self.context_mappings}")
 
-        extracted_context = {
-            k: jmespath.search(v, event['response']) for k, v in self.context_mappings.items()
-        }
+        extracted_context = {k: jmespath.search(v, event) for k, v in self.context_mappings.items()}
+
         event[self.output_key] = [
             _format_question(self.prompt.format(**extracted_context), role=self.role)
         ]
