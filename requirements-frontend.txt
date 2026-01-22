@@ -1,2 +1,0 @@
-mlrun
-streamlit==1.49.1

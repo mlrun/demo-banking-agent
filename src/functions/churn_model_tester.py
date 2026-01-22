@@ -1,5 +1,5 @@
 """
-v2_model_tester.py
+churn_model_tester.py
 ==================
 
 Implements a utility function for testing MLRun model serving functions. This module provides a tester that:
@@ -13,11 +13,11 @@ Intended for validating model deployments in the Banking Agent Demo or similar M
 """
 
 import json
-import os
+# import os
 from datetime import datetime
 
 import numpy as np
-import pandas as pd
+# import pandas as pd
 import requests
 from mlrun.artifacts import ChartArtifact
 from mlrun.datastore import DataItem

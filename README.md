@@ -42,7 +42,7 @@ The banking agent demo architecture is customizable, with observability for proj
 ![](images/generative_model_monitoring.png)
 
 ## Prerequisites
-- Minimum of 6 CPUs 
+- Minimum of 2 CPUs
 
 ## Installation guide
 
@@ -65,7 +65,7 @@ The banking agent demo architecture is customizable, with observability for proj
 
 3. Set OpenAI credentials
 
-  Copy the [env file](.env.example) as `ai_gateway.env` and update to include:
+  Copy the [env file](ai_gateway.env) as `ai_gateway.env` and update to include:
   - `OPENAI_API_KEY`: Your OpenAI API key.
   - `OPENAI_BASE_URL`: The base URL for OpenAI API.
 
@@ -85,7 +85,7 @@ The banking agent demo architecture is customizable, with observability for proj
     - [data/churn_dataset.csv](data/churn_dataset.csv): Sample dataset for training.
     - [src/model_monitoring_utils.py](src/model_monitoring_utils.py): Utilities for enabling model monitoring.
     - [src/functions/train.py](src/functions/train.py): Training logic for the churn model.
-    - [src/functions/v2_model_server.py](src/functions/v2_model_server.py): Model serving logic.
+    - [src/functions/churn_model.py](src/functions/churn_model.py): Model serving logic.
 
 ### 2. **Guardrails**
 - **Notebook**: [02_guardrail_deployment.ipynb](02_guardrail_deployment.ipynb)

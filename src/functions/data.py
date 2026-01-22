@@ -12,11 +12,11 @@ These functions are designed to be used in MLRun pipelines for preparing and ana
 """
 
 import mlrun
-import pandas
+# import pandas
 import pandas as pd
-import pandera as pa
-from datasets import Dataset, load_dataset
-from pandera.typing import DataFrame
+# import pandera as pa
+from datasets import Dataset #, load_dataset
+# from pandera.typing import DataFrame
 from sklearn import set_config
 from sklearn.compose import make_column_transformer
 from sklearn.model_selection import train_test_split

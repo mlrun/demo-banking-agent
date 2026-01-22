@@ -13,96 +13,92 @@ Implements the core serving graph and model servers for the Banking Agent Demo a
 These components are orchestrated in a serving graph (see 03_application_deployment.ipynb) to process user queries, enforce safety, analyze sentiment and churn propensity, and generate context-aware responses using LLMs and vector search.
 """
 
-import os
-from typing import Any
-
-import evaluate
 import jmespath
 import mlrun
 import openai
 import requests
+from langchain.agents import create_react_agent
 from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_core.tools import create_retriever_tool
 from langchain_milvus import Milvus
-from langchain_openai import OpenAIEmbeddings
-from langgraph.prebuilt import create_react_agent
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+from langchain_core.tools import tool
 from mlrun.serving.routers import ParallelRun
-from mlrun.serving.v2_serving import V2ModelServer
 from storey.transformations import Choice
-from transformers import AutoTokenizer, RobertaForSequenceClassification, pipeline
+from langchain_core.prompts import PromptTemplate
+from typing import Any, Optional
+from transformers import AutoModelForCausalLM, AutoTokenizer, RobertaForSequenceClassification, pipeline
+import torch
+
+def enrich_request(event: dict):
+    print("Inside enrich_request")
+    print("This is the event in the beginning: ",event)
+    # assumes your request body has: {"inputs": [{"role": "...", "content": "..."} , ...]}
+    last_content = (event.get("inputs") or [{}])[-1].get("content")
+
+    # Fill only if missing, so you can still override when needed
+    event["latest_user_message"]= last_content
+    event["question"] = last_content
+    print("This is the event in the end of enrich_request: ",event)
+    return event
 
 
-class OpenAILLMModelServer(V2ModelServer):
+def _format_question(question: str, role: str = "user"):
     """
-    MLRun V2ModelServer for OpenAI LLM chat completion.
+    Format a question for LLM input.
 
-    Used in the serving graph to generate responses from an OpenAI model, with a system prompt and chat history.
+    :param question: The question text.
+    :param role: The role of the message sender (default 'user').
 
-    :param context: MLRun context.
-    :param name: Name of the function.
-    :param model_path: Path to the model (placeholder - not used).
-    :param model_name: OpenAI model name (e.g., 'gpt-4o-mini').
-    :param system_prompt: System prompt for the LLM.
-    :param temperature: Sampling temperature for LLM output.
-    :param input_key: Key for input messages in the request (default 'inputs').
+    :returns: Formatted message dictionary.
     """
+    return {"role": role, "content": question.strip()}
 
-    def __init__(
-        self,
-        context: mlrun.MLClientCtx = None,
-        name: str = None,
-        model_path: str = None,
-        model_name: str = None,
-        system_prompt: str = None,
-        temperature: int = 0,
-        input_key: str = "inputs",
-        **kwargs,
-    ):
-        super().__init__(name=name, context=context, model_path=model_path, **kwargs)
-        self.model = None
-        self.model_name = model_name
-        self.system_prompt = system_prompt
-        self.temperature = temperature
-        self.input_key: str = input_key
 
-    def load(self):
-        print("Establishing connection to OpenAI")
-        api_key = mlrun.get_secret_or_env("OPENAI_API_KEY")
-        base_url = mlrun.get_secret_or_env("OPENAI_BASE_URL")
-        self.client = openai.OpenAI(
-            api_key=api_key,
-            base_url=base_url,
-        )
+def accept(event):
+    """
+    Accept handler for valid input.
 
-    def predict(self, request: dict[str, Any]):
-        """
-        Generate a model prediction based on the provided request dictionary.
+    Returns the event unchanged if all guardrails pass.
 
-        This method formats the chat history from the request, sends it to the model for completion,
-        and returns the generated response.
+    :param event: The event dictionary.
 
-        :param request: A dictionary containing the chat messages under the key specified by `self.input_key`.
+    :returns: The event unchanged if all guardrails pass.
+    """
+    print("ACCEPT")
+    print("This is the event: ",event)
+    return event
 
-        :returns: A list containing the model's response as a single string.
-        """
-        messages = request[self.input_key]
 
-        # format chat history for single user input (used for model monitoring)
-        formatted_messages = "\n".join(
-            [f"{m['role']}: {m['content']}" for m in messages]
-        )
-        request[self.input_key] = [formatted_messages]
+def reject(event):
+    """
+    Reject handler for invalid input.
 
-        result = self.client.chat.completions.create(
-            model=self.model_name,
-            temperature=self.temperature,
-            messages=[
-                {"role": "system", "content": self.system_prompt},
-                {"role": "user", "content": formatted_messages},
-            ],
-        )
+    Returns a standard rejection message if any guardrail fails.
 
-        return [result.choices[0].message.content]
+    :param event: The event dictionary.
+
+    :returns: The event with a standard rejection message if any guardrail fails.
+    """
+    print("REJECT")
+    print("This is the event: ",event)
+    event["outputs"] = [
+        "As a banking agent, I am not allowed to talk on this subject. Is there anything else I can help with?"
+    ]
+    return event
+
+
+def responder(event):
+    """
+    Final responder handler.
+
+    Returns the event as the final output of the serving graph.
+
+    :param event: The event dictionary.
+
+    :returns: The event as the final output of the serving graph.
+    """
+    return event
 
 
 class GuardrailsChoice(Choice):
@@ -131,96 +127,23 @@ class GuardrailsChoice(Choice):
 
         :returns: A list with the selected outlet(s) based on the guardrails' evaluation.
         """
-        flag = "True"
+        print("SELECT_OUTLETS inside 'GuardrailsChoice'")
+        print("This is the event: ",event)
+        flag = True
         for guardrail, output in event["guardrails_output"].items():
-            if str(output["outputs"][0]) == "False":
-                flag = "False"
-        return [self.mapping[flag]]
+            # common patterns you have in your data:
+            if "response" in output:
+                val = output["response"][0]  # e.g., True/False
+            elif "answer" in output:
+                val = output["answer"]  # e.g., "False"
+            else:
+                # unknown schema: treat as pass or fail depending on your policy
+                val = True
 
+            if str(val) == "False":
+                flag = False
 
-def accept(event):
-    """
-    Accept handler for valid input.
-
-    Returns the event unchanged if all guardrails pass.
-
-    :param event: The event dictionary.
-
-    :returns: The event unchanged if all guardrails pass.
-    """
-    print("ACCEPT")
-    return event
-
-
-def reject(event):
-    """
-    Reject handler for invalid input.
-
-    Returns a standard rejection message if any guardrail fails.
-
-    :param event: The event dictionary.
-
-    :returns: The event with a standard rejection message if any guardrail fails.
-    """
-    print("REJECT")
-    event["outputs"] = [
-        "As a banking agent, I am not allowed to talk on this subject. Is there anything else I can help with?"
-    ]
-    return event
-
-
-def responder(event):
-    """
-    Final responder handler.
-
-    Returns the event as the final output of the serving graph.
-
-    :param event: The event dictionary.
-
-    :returns: The event as the final output of the serving graph.
-    """
-    return event
-
-
-class ToxicityClassifierModelServer(V2ModelServer):
-    """
-    MLRun V2ModelServer for toxicity detection.
-
-    Uses the 'toxicity' evaluation module to check if input text contains toxic language.
-
-    :param context: MLRun context.
-    :param name: Name of the function.
-    :param threshold: Toxicity threshold (default 0.7).
-    """
-
-    def __init__(self, context, name: str, threshold: float = 0.7, **class_args):
-        # Initialize the base server:
-        super(ToxicityClassifierModelServer, self).__init__(
-            context=context,
-            name=name,
-            **class_args,
-        )
-
-        # Store the threshold of toxicity:
-        self.threshold = threshold
-
-    def load(self):
-        self.model = evaluate.load("toxicity", module_type="measurement")
-
-    def predict(self, inputs: dict) -> str:
-        """
-        Predicts whether the input content is below the toxicity threshold.
-
-        :param inputs: A dictionary containing an "inputs" key, which is a list of dictionaries with a "content" key.
-
-        :returns: A list containing a boolean indicating if the predicted toxicity is below the threshold.
-        """
-        return [
-            self.model.compute(predictions=[i["content"] for i in inputs["inputs"]])[
-                "toxicity"
-            ][0]
-            < self.threshold
-        ]
+        return [self.mapping[str(flag)]]
 
 
 class ParallelRunMerger(ParallelRun):
@@ -238,12 +161,13 @@ class ParallelRunMerger(ParallelRun):
 
     def merger(self, body, results):
         body[self.output_key] = results
+        print("Body input (ParallelRunMerger): ",body)
         return body
 
 
-class SentimentAnalysisModelServer(V2ModelServer):
+class SentimentAnalysisModelServer(mlrun.serving.Model):
     """
-    MLRun V2ModelServer for sentiment analysis.
+    MLRun Model for sentiment analysis.
 
     Uses a HuggingFace transformer model to classify sentiment of the latest user message.
 
@@ -255,10 +179,10 @@ class SentimentAnalysisModelServer(V2ModelServer):
 
     def __init__(
         self,
-        context,
         name: str,
         model_name: str = "cardiffnlp/twitter-roberta-base-sentiment-latest",
         top_k: int = 1,
+        context=None,
         **class_args,
     ):
         # Initialize the base server:
@@ -289,14 +213,16 @@ class SentimentAnalysisModelServer(V2ModelServer):
 
         :returns: A list containing the predicted sentiment label as a string.
         """
+        print("Inside SentimentAnalysisModelServer predict, this is the inputs: ",inputs)
         message = inputs["inputs"][-1]["content"]
+        print("Inside sentiment-analysis step")
         print("MESSAGE", message)
-        return [self.sentiment_classifier(message)[0][0]["label"]]
+        return {"response": [self.sentiment_classifier(message)[0][0]["label"]]}
 
 
-class ChurnModelServer(V2ModelServer):
+class ChurnModelServer(mlrun.serving.Model):
     """
-    MLRun V2ModelServer for churn prediction.
+    MLRun Model for churn prediction.
 
     Looks up user features and queries a deployed churn model endpoint to predict churn propensity, mapping the score to a label.
 
@@ -310,12 +236,12 @@ class ChurnModelServer(V2ModelServer):
 
     def __init__(
         self,
-        context,
         name: str,
         dataset: str,
         label_column: str,
         endpoint_url: str,
         churn_mappings: dict,
+        context=None,
         **class_args,
     ):
         # Initialize the base server:
@@ -354,11 +280,13 @@ class ChurnModelServer(V2ModelServer):
 
         :returns: A list containing the predicted churn label(s) for the user.
         """
+        print("Inside churn prediction step")
+        print("INPUTS", inputs)
         resp = requests.post(
             url=self.endpoint_url, json={"inputs": [self.data[inputs["user_id"]]]}
         )
         resp_json = resp.json()
-        churn_score = resp_json["outputs"][0]
+        churn_score = resp_json["results"][0]
 
         # TODO: add churn score mapping into the churn model itself
         def map_churn_score(value):
@@ -366,19 +294,7 @@ class ChurnModelServer(V2ModelServer):
                 if value >= threshold:
                     return label
 
-        return [map_churn_score(churn_score)]
-
-
-def _format_question(question: str, role: str = "user"):
-    """
-    Format a question for LLM input.
-
-    :param question: The question text.
-    :param role: The role of the message sender (default 'user').
-
-    :returns: Formatted message dictionary.
-    """
-    return {"role": role, "content": question.strip()}
+        return {"response": [map_churn_score(churn_score)]}
 
 
 class BuildContext:
@@ -434,34 +350,18 @@ class BuildContext:
 
         :returns: The updated event dictionary with the formatted question added under the specified output key.
         """
-        extracted_context = {
-            k: jmespath.search(v, event) for k, v in self.context_mappings.items()
-        }
+        print(f"Processing event: {event}")
+        print(f"Context mapping: {self.context_mappings}")
+
+        extracted_context = {k: jmespath.search(v, event) for k, v in self.context_mappings.items()}
+
         event[self.output_key] = [
             _format_question(self.prompt.format(**extracted_context), role=self.role)
         ]
         return event
 
 
-class BankingAgent(V2ModelServer):
-    """
-    MLRun V2ModelServer for the Banking Agent LLM orchestration.
-
-    Combines LLM, vector search, and web search tools to generate context-aware responses for banking queries.
-    Used as the final step in the serving graph, leveraging retrieval-augmented generation and external tools.
-
-    :param vector_db_collection: Name of the Milvus collection for vector search.
-    :param vector_db_args: Connection arguments for Milvus.
-    :param vector_db_description: Description of the vector DB for the retriever tool.
-    :param model_name: OpenAI model name.
-    :param system_prompt: System prompt for the LLM.
-    :param prompt_input_key: Key for the formatted prompt in the request (default 'formatted_prompt').
-    :param messages_input_key: Key for the chat history/messages in the request (default 'inputs').
-    :param context: MLRun context.
-    :param name: Name of the function.
-    :param model_path: Path to the model (not used).
-    """
-
+class BankingAgentOpenAI(mlrun.serving.LLModel):
     def __init__(
         self,
         vector_db_collection: str,
@@ -486,24 +386,16 @@ class BankingAgent(V2ModelServer):
         self.vector_db_description = vector_db_description
 
     def load(self):
-        """
-        Initializes and loads the vector store, retriever tool, and agent.
-        This method establishes a connection to the OpenAI embedding service and initializes
-        the Milvus vector store with the specified collection and connection arguments. It then
-        creates a retriever tool using the vector store and sets up the agent with the specified
-        model, tools, and system prompt.
-        """
-
-        if self.vector_db_args.get("uri").startswith("store://"):
-            vectordb_path = mlrun.get_dataitem(
-                self.vector_db_args["uri"]
-            ).local()
-
+        if self.vector_db_args.get("uri", "").startswith("store://"):
+            vectordb_path = mlrun.get_dataitem(self.vector_db_args["uri"]).local()
             self.vector_db_args["uri"] = f"{vectordb_path}"
             import time
-            time.sleep(5)  # wait for the file to be available locally
+            time.sleep(5)
 
-        print("Establishing connection to OpenAI")
+        # 1) Create an LLM object (NOT a string)
+        self.llm = ChatOpenAI(model=self.model_name, temperature=0)
+
+        # 2) Vector store + retriever tool
         self.vectorstore = Milvus(
             collection_name=self.vector_db_collection,
             embedding_function=OpenAIEmbeddings(model="text-embedding-3-small"),
@@ -515,39 +407,140 @@ class BankingAgent(V2ModelServer):
             name="bank-info-tool",
             description=self.vector_db_description,
         )
-        self.agent = create_react_agent(
-            model=self.model_name,
-            tools=[DuckDuckGoSearchRun(), self.retriever_tool],
-            prompt=self.system_prompt,
+
+        # 3) ReAct prompt TEMPLATE (must contain tools/tool_names/agent_scratchpad)
+        react_template = """{system_prompt}
+
+        You have access to the following tools:
+        {tools}
+        
+        Use the following format:
+        
+        Question: {input}
+        Thought: you should always think about what to do
+        Action: one of [{tool_names}]
+        Action Input: the input to the action
+        Observation: the result of the action
+        ... (repeat Thought/Action/Action Input/Observation as needed)
+        Thought: I now know the final answer
+        Final: the final answer to the user
+        
+        Begin!
+        
+        Question: {input}
+        {agent_scratchpad}
+        """
+        prompt = PromptTemplate.from_template(react_template).partial(
+            system_prompt=self.system_prompt
         )
 
+        # 4) Create agent runnable
+        self.agent = create_react_agent(
+            llm=self.llm,
+            tools=[DuckDuckGoSearchRun(), self.retriever_tool],
+            prompt=prompt,
+        )
+
+    def _messages_to_input_text(self, messages: Any) -> str:
+        """
+        Your current request seems to contain a 'formatted_prompt' plus chat history.
+        ReAct agent expects a single 'input' string, so we collapse messages into text.
+        Adjust this to your actual message object types (dicts vs BaseMessage).
+        """
+        parts = []
+        for m in messages:
+            if isinstance(m, dict):
+                role = m.get("role", "user")
+                content = m.get("content", "")
+            else:
+                # LangChain BaseMessage usually has .type / .content
+                role = getattr(m, "type", "user")
+                content = getattr(m, "content", str(m))
+            parts.append(f"{role}: {content}")
+        return "\n".join(parts).strip()
+
     def predict(self, request: dict[str, Any]):
-        """
-        Processes a request to generate a prediction using the agent, parses tool calls, and formats the response.
-
-        :param request: A dictionary containing input data, including prompt and message history.
-
-        :returns: A dictionary with the agent's response and a list of tool call details for UI display.
-        """
+        print("Inside BankingAgentOpenAI predict, this is the request: ", request)
+        # Your original line: messages = request[prompt_key] + request[messages_key]
         messages = request[self.prompt_input_key] + request[self.messages_input_key]
-        print(messages)
+        input_text = self._messages_to_input_text(messages)
 
-        resp = self.agent.invoke({"messages": messages})
-        response = resp["messages"][-1].content
+        # ReAct agent expects {"input": ...}, not {"messages": ...}
+        resp = self.agent.invoke({"input": input_text})
 
-        # Parse tool calls from the agent's message trace for UI display. This loop iterates over all messages in the agent's output:
-        # - If a message contains tool calls, it adds an entry for each tool call (by id) with a title describing the tool and query used.
-        # - If a message is a response to a previous tool call (has a tool_call_id), it attaches the tool's output/content to the corresponding tool call entry.
-        # Example output: [{'title': '🛠️ Used tool bank-info-tool: cashback rewards checking account IGZ Bank', 'content': 'Guidelines for Opening Checking/Savings Accounts...}]
-        tool_calls = {}
-        for m in resp["messages"]:
-            md = m.dict()
-            if "tool_calls" in md and md["tool_calls"]:
-                for t in md["tool_calls"]:
-                    tool_calls[t["id"]] = {
-                        "title": f"🛠️ Used tool {t['name']}: {t['args']['query']}"
-                    }
-            if "tool_call_id" in md and md["tool_call_id"] in tool_calls:
-                tool_calls[md["tool_call_id"]]["content"] = md["content"]
+        # Depending on LC version, `resp` may be a string or a dict.
+        # In many versions, create_react_agent returns the final string directly.
+        response_text = resp if isinstance(resp, str) else resp.get("output", str(resp))
 
-        return {"response": [response], "tool_calls": list(tool_calls.values())}
+        # Tool call parsing: with ReAct runnable, tool traces are usually in intermediate steps,
+        # not in resp["messages"]. If you need UI tool logs, consider AgentExecutor with return_intermediate_steps=True.
+        return {"response": [response_text], "tool_calls": []}
+
+
+class BankingAgentHuggingFace(mlrun.serving.LLModel):
+    def __init__(
+        self,
+        context: mlrun.MLClientCtx = None,
+        name: str = None,
+        model_path: str = None,
+        model_name: str = None,
+        prompt_input_key: str = "formatted_prompt",   #  BuildContext output
+        messages_input_key: str = "inputs",           #  Chat history
+        max_new_tokens: int = 256,
+        temperature: float = 0.2,
+        **kwargs,
+    ):
+        super().__init__(name=name, context=context, model_path=model_path, **kwargs)
+        self.model_name = model_name
+        self.prompt_input_key = prompt_input_key
+        self.messages_input_key = messages_input_key
+        self.max_new_tokens = max_new_tokens
+        self.temperature = temperature
+
+    def load(self):
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        self.model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            torch_dtype=torch.float16 if torch.cuda.is_available() else None,
+            device_map="auto" if torch.cuda.is_available() else None,
+        )
+
+    def _coerce_messages(self, body: dict, messages: Optional[list] = None) -> list[dict]:
+        # Prefer MLRun-provided `messages` (like in banking_topic_guardrail.py),
+        # otherwise fall back to your graph’s request payload.
+        if messages:
+            return messages
+        msgs = []
+        if body.get(self.prompt_input_key):
+            # formatted_prompt in your graph is a list of {"role","content"} dicts
+            msgs += body[self.prompt_input_key]
+        if body.get(self.messages_input_key):
+            msgs += body[self.messages_input_key]
+        return msgs
+
+    def predict(self, body: Any, messages: list = None, invocation_config: Optional[dict] = None, **kwargs):
+        print("Inside BankingAgentHuggingFace predict, this is the body: ", body)
+        print("This is the messages: ", messages)
+
+        msgs = self._coerce_messages(body, messages)
+
+        # Minimal chat->text prompt (you can refine formatting per your model’s chat template)
+        prompt = "\n".join([f"{m.get('role','user')}: {m.get('content','')}" for m in msgs]).strip()
+        prompt += "\nassistant:"
+
+        inputs = self.tokenizer(prompt, return_tensors="pt")
+        inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
+
+        out = self.model.generate(
+            **inputs,
+            max_new_tokens=self.max_new_tokens,
+            do_sample=self.temperature > 0,
+            temperature=self.temperature,
+        )
+        decoded = self.tokenizer.decode(out[0], skip_special_tokens=True)
+
+        # Basic “strip prompt prefix” (often good enough; adjust per model)
+        answer = decoded[len(decoded) - max(0, len(decoded) - len(prompt)) :]
+        answer = answer.replace("assistant:", "").strip() or decoded.strip()
+
+        return {"response": [answer], "tool_calls": []}

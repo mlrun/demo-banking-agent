@@ -64,9 +64,12 @@ def enable_model_monitoring(
         stream_profile_name=stream_profile.name,
     )
 
-    project.enable_model_monitoring(
-        base_period=base_period,
-        wait_for_deployment=wait_for_deployment,
-        deploy_histogram_data_drift_app=deploy_histogram_data_drift_app,
-    )
+    try:
+        project.enable_model_monitoring(
+            base_period=base_period,
+            wait_for_deployment=wait_for_deployment,
+            deploy_histogram_data_drift_app=deploy_histogram_data_drift_app,
+        )
+    except mlrun.errors.MLRunConflictError:
+        print("Model monitoring is already enabled for this project.")
     return project

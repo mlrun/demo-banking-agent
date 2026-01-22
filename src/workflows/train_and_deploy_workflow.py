@@ -142,14 +142,21 @@ def pipeline(
 
     # Deploy model to endpoint
     serving_fn = project.get_function("serving")
+
+    graph = serving_fn.set_topology("flow", engine="async")
+    model_runner_step = mlrun.serving.ModelRunnerStep()
+
+    model_runner_step.add_model(
+        model_class="ChurnModel",
+        artifact_uri=train.outputs["model_uri"],
+        endpoint_name="banking-topic-guardrail",
+        execution_mechanism="naive",
+        model_name=model_name,
+    )
+    graph.to(model_runner_step).respond()
     serving_fn.set_tracking()
-    deploy = project.deploy_function(
-        serving_fn,
-        models=[
-            {
-                "key": model_name,
-                "model_path": train.outputs["model_uri"],
-                "class_name": "ChurnModel",
-            }
-        ],
+    func_path = serving_fn.save()
+    project.set_function(name="serving", func=func_path)
+    
+    deploy = project.deploy_function("serving"
     ).after(validate_model)

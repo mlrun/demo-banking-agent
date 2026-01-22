@@ -60,7 +60,7 @@ def generate(
     resp = requests.post(
         API_URL,
         json={"inputs": inputs, "name": name, "user_id": NAMES.get(name)},
-        verify=False,
+        # verify=False,
     )
     resp.raise_for_status()
     resp_json = resp.json()
