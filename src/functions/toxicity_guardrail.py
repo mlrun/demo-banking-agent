@@ -44,8 +44,6 @@ class ToxicityClassifierModelServer(mlrun.serving.Model):
         :returns: A list containing a boolean indicating if the predicted toxicity is below the threshold.
         """
 
-        print(inputs)
-        print("@@@@@")
         return {"response" :[
             self.model.compute(predictions=[i["content"] for i in inputs["inputs"]])[
                 "toxicity"

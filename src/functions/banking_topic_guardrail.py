@@ -53,5 +53,3 @@ class LLMModelServer(mlrun.serving.LLModel):
         else:
             answer = "Unavailable"
         return {"question": body["question"], "answer": answer}
-        # return {"response": answer}
-    
