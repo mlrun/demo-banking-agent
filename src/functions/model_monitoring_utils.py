@@ -3,7 +3,7 @@ import os
 import mlrun
 from mlrun.datastore.datastore_profile import (
     DatastoreProfileKafkaSource,
-    DatastoreProfileTDEngine,
+    DatastoreProfilePostgreSQL,
     DatastoreProfileV3io,
 )
 
@@ -41,12 +41,13 @@ def enable_model_monitoring(
 
     if mlrun.mlconf.is_ce_mode():
         mlrun_namespace = os.environ.get("MLRUN_NAMESPACE", "mlrun")
-        tsdb_profile = DatastoreProfileTDEngine(
+        tsdb_profile = DatastoreProfilePostgreSQL(
             name=tsdb_profile_name,
             user="root",
             password="taosdata",
-            host=f"tdengine-tsdb.{mlrun_namespace}.svc.cluster.local",
-            port="6041",
+            host=f"timescaledb.{mlrun_namespace}.svc.cluster.local",
+            port="5432", #the last one was 6041
+            database="mlrun",
         )
 
         stream_profile = DatastoreProfileKafkaSource(
@@ -64,9 +65,12 @@ def enable_model_monitoring(
         stream_profile_name=stream_profile.name,
     )
 
-    project.enable_model_monitoring(
-        base_period=base_period,
-        wait_for_deployment=wait_for_deployment,
-        deploy_histogram_data_drift_app=deploy_histogram_data_drift_app,
-    )
+    try:
+        project.enable_model_monitoring(
+            base_period=base_period,
+            wait_for_deployment=wait_for_deployment,
+            deploy_histogram_data_drift_app=deploy_histogram_data_drift_app,
+        )
+    except mlrun.errors.MLRunConflictError:
+        print("Model monitoring is already enabled for this project.")
     return project

@@ -73,8 +73,10 @@ def train_model(
 
     # Train our model
     model.fit(X_train, y_train)
-
+    
     # Log model artifact URI for serving
+    import time
+    time.sleep(5)  # Ensure model is fully registered before retrieval
     project = context.get_project_object()
     model_artifact = project.list_artifacts(
         name=model_name, iter=1, tag="latest"

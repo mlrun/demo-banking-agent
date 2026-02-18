@@ -65,8 +65,6 @@ from mlrun.model_monitoring.applications import (
 )
 from mlrun.utils import logger
 
-# import transformers
-
 
 """
 @misc{zheng2023judging,
@@ -83,30 +81,38 @@ from mlrun.utils import logger
 """
 
 SINGLE_GRADE_PROMPT = """
+You are a strict classification evaluator.
+
 Task:
-Please act as an impartial judge and evaluate the quality of the response provided by an
-AI assistant to the user question displayed below.
-You will be given the definition of {name}, grading rubric, context information.
-Your task is to determine a numerical score of {name} for the response.
-You must use the grading rubric to determine your score.
-You must also give an explanation about how did you determine the score step-by-step.
-Please use chain of thinking.
-Examples could be included below for your reference.
-Make sure you understand the grading rubric and use the examples before completing the task.
-[Examples]:
-{examples}
-[User Question]:
+Evaluate whether the assistant correctly classified the user's question as banking-related.
+The assistant used the metric "{name}".
+
+Important rules:
+- The assistant response is ONLY a label: True or False
+- True means: the question IS about banking
+- False means: the question IS NOT about banking
+- Do NOT judge how helpful or informative the response is
+- Do NOT expect an explanation from the assistant
+- Ignore whether the question itself was answered
+- The score must be 1 if the assistant's label is correct, otherwise 0
+- Provide a short reason (1 sentence) for your score
+
+Inputs:
+Question:
 {question}
-[Response]:
+
+Assistant Label:
 {answer}
-[Definition of {name}]:
+
+Metric Definition:
 {definition}
-[Grading Rubric]:
+
+Grading Rubric:
 {rubric}
-Answer the following question and return as a python dictionary:
-{{"score": <a numerical score of {name} for the response>
-"explanation": <a string value of an explanation about how did you determine the score step-by-step>}}
-[Output]:
+
+Output:
+Return ONLY a valid Python dictionary in this exact format:
+{{"score": <0 or 1>, "explanation": "<short reason (1 sentence)>"}}
 """
 
 PAIR_GRADE_PROMPT = """
@@ -173,6 +179,7 @@ the ground truth of the response to determine the score step-by-step>,
 }}
 [Output]:
 """
+
 
 
 class JudgeTypes(enum.Enum):
@@ -526,9 +533,24 @@ class HuggingfaceJudge(BaseJudge, ABC):
             prompt_config=prompt_config,
             verbose=verbose,
         )
-        self.model_config = model_config or {}
+
+        import transformers
+        import torch
+
+        model_config = {
+            "torch_dtype": torch.float16,
+            "device_map": "auto"
+        }
+
+        model_infer_config = {
+            "max_new_tokens": 64,
+            "temperature": 0.0,
+            "do_sample": False,
+            "top_p": 1.0,
+        }
+        self.model_config = model_config or model_config
         self.tokenizer_config = tokenizer_config or {}
-        self.model_infer_config = model_infer_config or {}
+        self.model_infer_config = model_infer_config or model_infer_config
         if self.verbose:
             logger.info(f"Loading the judge model {self.model_name} from Huggingface")
 
@@ -569,8 +591,13 @@ class HuggingfaceJudge(BaseJudge, ABC):
 
         response_ids = outputs[0]
         response = self.tokenizer.decode(response_ids, skip_special_tokens=True)
+        
 
-        return response
+        matches = re.findall(r"\{[\s\S]*?\}", response)
+        if not matches:
+            return response
+        else:
+            return matches[-1]
 
     def _invoke_benchmark_model(self, prompt: str):
         input_ids = self.benchmark_tokenizer(prompt, return_tensors="pt").input_ids
@@ -587,6 +614,7 @@ class HuggingfaceJudge(BaseJudge, ABC):
         )
 
         return response
+
 
 
 FRAMEWORKS = {

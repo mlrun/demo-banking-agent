@@ -33,10 +33,6 @@ def create_deepchecks_dataset(df: pd.DataFrame, label_column: str) -> Dataset:
 
     :returns: A Deepchecks Dataset object with the specified label and detected categorical features.
     """
-    # Get numerical and categorical columns based on dataframe types
-    numerical_columns = list(
-        set(df.select_dtypes("number").columns) - set([label_column])
-    )
     categorical_columns = list(
         set(df.select_dtypes("object").columns) - set([label_column])
     )

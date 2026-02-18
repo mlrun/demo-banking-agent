@@ -1,4 +1,0 @@
-mlrun==1.9.2
-streamlit>=1.49.1
-vizro>=0.1.46
-dash-iconify
