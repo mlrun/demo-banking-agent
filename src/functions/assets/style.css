@@ -1,0 +1,62 @@
+#right-side {
+    padding: 60px;
+}
+
+#page-header {
+    display: none;
+}
+
+/* Style dmc.Select to match Vizro's built-in dropdown styling */
+.mantine-Select-input {
+    background-color: var(--bs-primary-bg-subtle) !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: var(--bs-box-shadow-sm) !important;
+    color: var(--bs-body-color) !important;
+    font-size: 0.875rem !important;
+    height: 32px !important;
+    min-height: 32px !important;
+}
+
+.mantine-Select-input:focus {
+    box-shadow: 0 0 0 2px var(--bs-focus-ring-color) inset !important;
+}
+
+.mantine-Select-dropdown {
+    background-color: var(--bs-primary-bg-subtle) !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: var(--bs-box-shadow-sm) !important;
+}
+
+.mantine-Select-option {
+    color: var(--bs-body-color) !important;
+    font-size: 0.875rem !important;
+    font-weight: 400 !important;
+    border-radius: 0 !important;
+}
+
+.mantine-Select-option:hover,
+.mantine-Select-option[data-combobox-selected] {
+    background-color: var(--hover-bg-subtle) !important;
+    color: var(--bs-primary) !important;
+}
+
+.mantine-InputWrapper-label {
+    color: var(--bs-body-color) !important;
+}
+
+.mantine-Paper-root {
+    border-radius: 0;
+    background: var(--bs-body-bg);
+    border-color: var(--bs-border-color);
+}
+
+.mantine-Accordion-item {
+    background: var(--left-side-bg) !important;
+}
+
+.mantine-Badge-root {
+    background: var(--left-side-bg) !important;
+    border-color: var(--bs-border-color) !important;
+}
