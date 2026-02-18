@@ -25,5 +25,5 @@ milvus-lite
 scikit-learn==1.5.2
 streamlit
 sentence-transformers
-vizro>=0.1.46
+vizro>=0.1.51
 dash-iconify
