@@ -507,8 +507,8 @@ class BankingAgentOpenAI(mlrun.serving.LLModel):
             tools=tools,
             verbose=True,
             handle_parsing_errors=True,
-            max_iterations=5,  # Stop after 5 attempts
-
+            max_iterations=20,         # Increase the maximum number of steps (default is 15)
+            max_execution_time=120 
         )
 
     def _messages_to_input_text(self, messages: Any) -> str:

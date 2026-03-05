@@ -38,7 +38,7 @@ Set up a model monitoring function in MLRun using this module:
         framework="openai",
         judge_type="single-grading",
         metric_name="restrict_to_banking",
-        model_name="gpt-4o-mini",
+        model_name="gpt-4.1-mini",
         prompt_config=restrict_to_banking_config,
         requirements=["openai"]
     )
