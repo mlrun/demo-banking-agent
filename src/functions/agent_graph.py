@@ -428,6 +428,7 @@ class BankingAgentOpenAI(mlrun.serving.LLModel):
         context: mlrun.MLClientCtx = None,
         name: str = None,
         model_path: str = None,
+        project_name: str = None,
         **kwargs,
     ):
         super().__init__(name=name, context=context, model_path=model_path, **kwargs)
@@ -438,6 +439,7 @@ class BankingAgentOpenAI(mlrun.serving.LLModel):
         self.vector_db_collection = vector_db_collection
         self.vector_db_args = vector_db_args
         self.vector_db_description = vector_db_description
+        self.project_name = project_name
 
     def load(self):
         if self.vector_db_args.get("uri", "").startswith("store://"):
@@ -447,7 +449,11 @@ class BankingAgentOpenAI(mlrun.serving.LLModel):
             time.sleep(5)
 
         # 1) Create an LLM object
-        self.llm = ChatOpenAI(model=self.model_name, temperature=0)
+        project = mlrun.get_run_db().get_project(self.project_name)
+        self.llm = ChatOpenAI(model=self.model_name,
+                              temperature=0,
+                              api_key=project.get_secret("OPENAI_API_KEY"),
+                              base_url=project.get_secret("OPENAI_BASE_URL"))
 
         # 2) Vector store + retriever tool
         self.vectorstore = Milvus(
