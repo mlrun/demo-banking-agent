@@ -6,13 +6,13 @@ In this demo the user can choose to use remote LLM (we used openAI) or a local L
 Note: for demonstration purposes we used a model that does not require GPU. However, this model has significantly less accurate results and slow performance.
 ## Description
 
-The banking agent demo architecture is customizable, with observability for project, tabular, and generative models. MLRun is used to orchestrate the entire workflow, from data processing to model deployment and serving.
+ MLRun orchestrates the entire workflow, from data processing to model deployment and serving.
 
 **Business use case:**
 - Banking customer service chatbot with conditional routing
-- Model behavior adapts to conversation history, sentiment, and churn propensity
-- Modular, customizable architecture
-- Observability for project, tabular, and generative models 
+  - Model behavior adapts to conversation history, sentiment, and churn propensity
+  - Modular, customizable architecture
+  - Observability for project, tabular, and generative models
 
 **Technical capabilities:**
 - End-to-end ML pipeline: training and serving for churn prediction
@@ -22,6 +22,10 @@ The banking agent demo architecture is customizable, with observability for proj
 - Application serving graph: input guardrails, enrichment, and agent invocation
 - Streamlit UI: displays guardrail, enrichment, and tool outputs
 - Monitoring for both tabular ML and generative models
+
+This demo uses a remote OpenAI LLM and a local Qwen LLM. You can choose alternative remote and/or local LLMs.
+
+  This demo uses a model that does not require GPU, for illustrative purposes. This model, however, has significantly less accurate results.
 
 ### Architecture
 ![](images/banking_agent_architecture.png)
@@ -122,4 +126,4 @@ The banking agent demo architecture is customizable, with observability for proj
   - [src/functions/llm_as_a_judge.py](src/functions/llm_as_a_judge.py): Provides LLM-based evaluation and monitoring for guardrail performance.
   - [src/functions/frontend_ui.py](src/functions/frontend_ui.py): Streamlit frontend UI application for chat interface with display for guardrails and input analyses.
   - [data/general_bank_info_kb.md](data/general_bank_info_kb.md), [data/checking_savings_kb.md](data/checking_savings_kb.md), [data/customer_faq.md](data/customer_faq.md): Knowledge base files for RAG.
-  - [requirements-agent.txt](requirements-agent.txt): Requirements for the agent and serving graph.
+  - [requirements.txt](requirements.txt): Requirements for deploying the application.
